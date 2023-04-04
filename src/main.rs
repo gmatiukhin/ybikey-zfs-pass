@@ -2,6 +2,8 @@ use std::process::Command;
 
 use clap::Parser;
 
+mod dicepw;
+
 /// Simple program to generate diceware password with YubiKey challenge response
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
