@@ -1,50 +1,44 @@
-use std::process::Command;
-
-use clap::Parser;
-use dicepw::params::DicewareParams;
-
-use crate::dicepw::generate::{advance, check_pw, generate_pw};
-
-mod dicepw;
-
-/// Simple program to generate diceware password with YubiKey challenge response
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Challenge to sent to ykchalresp
-    #[arg(short, long)]
-    challenge: String,
-}
+use sha1::{Digest, Sha1};
+use std::{fs::read, process::Command};
 
 fn main() {
-    let args = Args::parse();
-    if let Ok(output) = Command::new("ykchalresp")
-        .arg("-2")
-        .arg(args.challenge)
+    match Command::new("ykinfo")
+        .args(["-q", "-s"])
         .output()
+        .map(|o| o.status.success())
     {
-        if output.status.success() {
-            let output = String::from_utf8(output.stdout).unwrap();
-            println!("{}", output.trim());
+        Ok(true) => {
+            println!("Please enter challenge");
+            let mut challenge = String::new();
+            if std::io::stdin().read_line(&mut challenge).is_ok() {
+                if let Ok(output) = Command::new("ykchalresp")
+                    .arg("-2")
+                    .arg(challenge.trim())
+                    .output()
+                {
+                    if output.status.success() {
+                        let resp = output.stdout;
+                        if let Ok(secret) = read("secret") {
+                            let pass = secret
+                                .into_iter()
+                                .zip(resp)
+                                .map(|(a, b)| a ^ b)
+                                .collect::<Vec<_>>();
+                            println!("{pass:?}");
+                        }
+                    }
+                }
+            }
         }
-    }
-
-    let params = DicewareParams {
-        words: dicepw::params::Range { low: 2, high: 2 },
-        extras: dicepw::params::Range { low: 0, high: 0 },
-    };
-
-    let mut seed = [0; 20];
-    let target_pw = generate_pw(&seed, &params);
-    let mut i = 0;
-    loop {
-        i += 1;
-        if check_pw(&seed, &params, &target_pw).is_ok() {
-            println!("FOUND: {seed:?}");
+        _ => {
+            println!("No YubiKey found. Please enter the passphrase.");
+            let mut passphrase = String::new();
+            if std::io::stdin().read_line(&mut passphrase).is_ok() {
+                let mut hasher = Sha1::new();
+                hasher.update(passphrase.trim().as_bytes());
+                let res = hasher.finalize();
+                println!("{:x?}", res);
+            }
         }
-        if i % 100000 == 0 {
-            println!("{i}");
-        }
-        advance(&mut seed);
     }
 }
