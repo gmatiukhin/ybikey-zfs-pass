@@ -1,6 +1,9 @@
 use std::process::Command;
 
 use clap::Parser;
+use dicepw::params::DicewareParams;
+
+use crate::dicepw::generate::{advance, check_pw, generate_pw};
 
 mod dicepw;
 
@@ -23,9 +26,25 @@ fn main() {
         if output.status.success() {
             let output = String::from_utf8(output.stdout).unwrap();
             println!("{}", output.trim());
-            use chbs::passphrase;
-
-            println!("Passphrase: {:?}", passphrase());
         }
+    }
+
+    let params = DicewareParams {
+        words: dicepw::params::Range { low: 2, high: 2 },
+        extras: dicepw::params::Range { low: 0, high: 0 },
+    };
+
+    let mut seed = [0; 20];
+    let target_pw = generate_pw(&seed, &params);
+    let mut i = 0;
+    loop {
+        i += 1;
+        if check_pw(&seed, &params, &target_pw).is_ok() {
+            println!("FOUND: {seed:?}");
+        }
+        if i % 100000 == 0 {
+            println!("{i}");
+        }
+        advance(&mut seed);
     }
 }
